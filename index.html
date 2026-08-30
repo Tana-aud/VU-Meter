@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<title>DM3 VUメーター</title>
+<style>
+  :root {
+    --bg: #e6e0d2;
+    --bg-grain: #dcd5c3;
+    --panel: #d2cab5;
+    --panel-edge: #b7ac91;
+    --panel-shadow: rgba(60, 50, 30, 0.28);
+    --screw: #93876b;
+    --face: #f4ecd8;
+    --face-edge: #cfc3a3;
+    --ink: #2a2417;
+    --ink-dim: #6b6249;
+    --text: #241f16;
+    --text-dim: #635a45;
+    --accent: #a8631f;
+    --accent-glow: rgba(168, 99, 31, 0.35);
+    --danger: #a83324;
+    --danger-glow: rgba(168, 51, 36, 0.45);
+    --good: #3f6e46;
+    --needle-vu: #2a2417;
+    --needle-peak: #1f5f6b;
+    --track: #c4bb9f;
+    --track-fill: #a8631f;
+    --focus: #1f5f6b;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15130e;
+      --bg-grain: #1b1811;
+      --panel: #221e15;
+      --panel-edge: #3c3520;
+      --panel-shadow: rgba(0, 0, 0, 0.55);
+      --screw: #55492e;
+      --face: #ece2c7;
+      --face-edge: #c7b98f;
+      --ink: #2a2417;
+      --ink-dim: #6b6249;
+      --text: #ece4d2;
+      --text-dim: #a89d80;
+      --accent: #dd9a45;
+      --accent-glow: rgba(221, 154, 69, 0.35);
+      --danger: #e0574a;
+      --danger-glow: rgba(224, 87, 74, 0.5);
+      --good: #6bbf78;
+      --needle-vu: #2a2417;
+      --needle-peak: #12464f;
+      --track: #3c3520;
+      --track-fill: #dd9a45;
+      --focus: #6fc3d1;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #15130e;
+    --bg-grain: #1b1811;
+    --panel: #221e15;
+    --panel-edge: #3c3520;
+    --panel-shadow: rgba(0, 0, 0, 0.55);
+    --screw: #55492e;
+    --face: #ece2c7;
+    --face-edge: #c7b98f;
+    --ink: #2a2417;
+    --ink-dim: #6b6249;
+    --text: #ece4d2;
+    --text-dim: #a89d80;
+    --accent: #dd9a45;
+    --accent-glow: rgba(221, 154, 69, 0.35);
+    --danger: #e0574a;
+    --danger-glow: rgba(224, 87, 74, 0.5);
+    --good: #6bbf78;
+    --needle-vu: #2a2417;
+    --needle-peak: #12464f;
+    --track: #3c3520;
+    --track-fill: #dd9a45;
+    --focus: #6fc3d1;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100%;
+  }
+
+  body {
+    font-family: "IBM Plex Sans JP", "IBM Plex Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+    background-image:
+      radial-gradient(circle at 1px 1px, var(--bg-grain) 1px, transparent 0);
+    background-size: 3px 3px;
+    padding: max(16px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom));
+    display: flex;
+    justify-content: center;
+  }
+
+  .rack {
+    width: 100%;
+    max-width: 460px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ---- Nameplate ---- */
+  .nameplate {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 2px 4px 8px;
+    border-bottom: 1px solid var(--panel-edge);
+  }
+  .nameplate h1 {
+    font-family: "Oswald", "IBM Plex Sans JP", sans-serif;
+    font-weight: 600;
+    font-size: clamp(19px, 5.5vw, 23px);
+    letter-spacing: 0.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .nameplate .model {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+
+  /* ---- Panel (hardware housing) ---- */
+  .panel {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 10px;
+    box-shadow: 0 10px 26px var(--panel-shadow), inset 0 1px 0 rgba(255,255,255,0.08);
+    padding: 18px 16px 16px;
+  }
+  .screw {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 32%, var(--screw), transparent 70%), var(--panel-edge);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+  }
+  .screw::after {
+    content: "";
+    position: absolute;
+    top: 50%; left: 12%;
+    width: 76%; height: 1px;
+    background: rgba(0,0,0,0.35);
+    transform: rotate(35deg);
+  }
+  .screw.tl { top: 8px; left: 8px; }
+  .screw.tr { top: 8px; right: 8px; }
+  .screw.bl { bottom: 8px; left: 8px; }
+  .screw.br { bottom: 8px; right: 8px; }
+
+  /* ---- Meter pair ---- */
+  .meters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .meter-unit {
+    background: var(--face);
+    border: 1px solid var(--face-edge);
+    border-radius: 6px;
+    padding: 8px 6px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), inset 0 0 0 6px rgba(0,0,0,0.03);
+  }
+  .meter-unit .ch-label {
+    font-family: "Oswald", sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--ink-dim);
+    margin-bottom: 2px;
+  }
+  canvas.gauge {
+    width: 100%;
+    max-width: 210px;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    display: block;
+  }
+  .readout {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    color: var(--ink-dim);
+    padding: 0 4px;
+    margin-top: 2px;
+  }
+  .readout b { color: var(--ink); font-weight: 600; }
+  .clip-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 5px;
+  }
+  .clip-lamp {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: #5a2a24;
+    box-shadow: inset 0 0 2px rgba(0,0,0,0.6);
+    transition: background 60ms linear, box-shadow 60ms linear;
+  }
+  .clip-lamp.lit {
+    background: var(--danger);
+    box-shadow: 0 0 8px 2px var(--danger-glow), inset 0 0 2px rgba(0,0,0,0.3);
+  }
+  .clip-label {
+    font-family: "Oswald", sans-serif;
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
+    color: var(--ink-dim);
+  }
+
+  /* ---- Meter / control columns ---- */
+  .control-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  /* ---- Status strip ---- */
+  .status-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(0,0,0,0.06);
+    border-radius: 6px;
+    font-size: 12.5px;
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-dim);
+    flex: none;
+  }
+  .status-dot.on { background: var(--good); box-shadow: 0 0 6px 1px var(--good); }
+  .status-dot.err { background: var(--danger); box-shadow: 0 0 6px 1px var(--danger-glow); }
+  .status-text { color: var(--text-dim); line-height: 1.4; }
+  .status-text b { color: var(--text); font-weight: 600; }
+
+  /* ---- Controls ---- */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .start-btn {
+    font-family: "Oswald", sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--face);
+    background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, black));
+    border: none;
+    border-radius: 8px;
+    padding: 13px 16px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 55%, black), 0 6px 14px rgba(0,0,0,0.25);
+    transition: transform 80ms ease, box-shadow 80ms ease;
+  }
+  .start-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 55%, black); }
+  .start-btn.stop {
+    background: linear-gradient(180deg, var(--danger), color-mix(in srgb, var(--danger) 75%, black));
+    box-shadow: 0 3px 0 color-mix(in srgb, var(--danger) 55%, black), 0 6px 14px rgba(0,0,0,0.25);
+  }
+  .start-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .row-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-family: "Oswald", sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+  }
+  select {
+    font-family: "IBM Plex Sans JP", sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
+    padding: 8px 8px;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+  .mode-switch {
+    display: flex;
+    background: var(--track);
+    border-radius: 7px;
+    padding: 3px;
+    gap: 3px;
+  }
+  .mode-switch button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-family: "Oswald", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 8px 4px;
+    border-radius: 5px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .mode-switch button.active {
+    background: var(--face);
+    color: var(--ink);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .mode-switch button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+  /* ---- Help ---- */
+  details.help {
+    border-top: 1px solid var(--panel-edge);
+    padding-top: 10px;
+  }
+  details.help summary {
+    font-family: "Oswald", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    cursor: pointer;
+    list-style: none;
+  }
+  details.help summary::-webkit-details-marker { display: none; }
+  details.help summary::before { content: "▸ "; }
+  details.help[open] summary::before { content: "▾ "; }
+  details.help .help-body {
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: var(--text-dim);
+    padding-top: 8px;
+  }
+  details.help .help-body strong { color: var(--text); }
+  details.help .help-body ol { margin: 6px 0; padding-left: 20px; }
+  details.help .help-body li { margin-bottom: 4px; }
+
+  .foot-note {
+    text-align: center;
+    font-size: 10.5px;
+    color: var(--text-dim);
+    opacity: 0.8;
+    margin-top: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .start-btn, .clip-lamp { transition: none; }
+  }
+
+  /* ---- Lock screen ---- */
+  .lock-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    padding: 20px;
+  }
+  .lock-card {
+    width: 100%;
+    max-width: 300px;
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 10px;
+    box-shadow: 0 10px 26px var(--panel-shadow), inset 0 1px 0 rgba(255,255,255,0.08);
+    padding: 24px 20px;
+    text-align: center;
+  }
+  .lock-card .lock-title {
+    font-family: "Oswald", sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.1em;
+    color: var(--text);
+    margin: 0 0 4px;
+  }
+  .lock-card .lock-sub {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin: 0 0 18px;
+  }
+  .lock-input {
+    width: 100%;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 16px;
+    letter-spacing: 0.12em;
+    color: var(--text);
+    background: var(--face);
+    border: 1px solid var(--face-edge);
+    border-radius: 6px;
+    padding: 11px 12px;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .lock-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .lock-btn {
+    width: 100%;
+    font-family: "Oswald", sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--face);
+    background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, black));
+    border: none;
+    border-radius: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 55%, black);
+  }
+  .lock-btn:active { transform: translateY(2px); box-shadow: none; }
+  .lock-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .lock-error {
+    min-height: 16px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--danger);
+  }
+  .lock-shake { animation: lock-shake 320ms ease; }
+  @keyframes lock-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lock-shake { animation: none; }
+  }
+
+  /* ---- Landscape (phone on its side) ---- */
+  @media (orientation: landscape) and (max-height: 540px) {
+    body {
+      padding-top: max(8px, env(safe-area-inset-top));
+      padding-bottom: max(8px, env(safe-area-inset-bottom));
+      padding-left: max(14px, env(safe-area-inset-left));
+      padding-right: max(14px, env(safe-area-inset-right));
+    }
+    .rack {
+      max-width: 760px;
+      gap: 6px;
+    }
+    .nameplate {
+      padding: 0 2px 4px;
+    }
+    .nameplate h1 { font-size: 15px; }
+    .nameplate .model { font-size: 9.5px; }
+    .panel {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 12px 14px;
+    }
+    .meter-col { flex: 1.4 1 0%; min-width: 0; }
+    .control-col {
+      flex: 1 1 0%;
+      min-width: 0;
+      margin-top: 0;
+      gap: 8px;
+      justify-content: flex-start;
+    }
+    .meters { gap: 8px; }
+    .meter-unit { padding: 6px 5px 8px; }
+    canvas.gauge {
+      width: auto;
+      max-width: none;
+      height: clamp(110px, 30vh, 170px);
+    }
+    .readout { font-size: 10px; }
+    .clip-label { font-size: 9px; }
+    .status-strip { padding: 6px 8px; font-size: 11px; gap: 6px; }
+    .controls { gap: 8px; }
+    .start-btn { padding: 10px 14px; font-size: 13.5px; }
+    .row-grid { gap: 8px; }
+    select { padding: 6px 7px; font-size: 12px; }
+    .mode-switch button { padding: 7px 4px; font-size: 11px; }
+    details.help { padding-top: 6px; }
+    details.help .help-body { font-size: 11px; line-height: 1.55; }
+    .foot-note { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="lock-overlay" id="lockOverlay">
+  <div class="lock-card">
+    <p class="lock-title">ACCESS LOCKED</p>
+    <p class="lock-sub">DM3 VUメーター — パスワードを入力してください</p>
+    <form id="lockForm" autocomplete="off">
+      <input class="lock-input" id="lockInput" type="password" inputmode="text" placeholder="パスワード" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <button class="lock-btn" type="submit">unlock</button>
+    </form>
+    <p class="lock-error" id="lockError"></p>
+  </div>
+</div>
+
+<div class="rack" id="app" hidden>
+
+  <div class="nameplate">
+    <h1>DM3 VUメーター</h1>
+    <span class="model">STEREO&nbsp;LEVEL&nbsp;MONITOR</span>
+  </div>
+
+  <div class="panel">
+    <span class="screw tl"></span><span class="screw tr"></span>
+    <span class="screw bl"></span><span class="screw br"></span>
+
+    <div class="meter-col">
+      <div class="meters">
+        <div class="meter-unit">
+          <div class="ch-label">L</div>
+          <canvas class="gauge" id="gaugeL" width="240" height="180" role="img" aria-label="Lチャンネル レベルメーター"></canvas>
+          <div class="readout"><span>PEAK</span><b id="peakValL">-∞</b></div>
+          <div class="readout"><span>HOLD</span><b id="holdValL">-∞</b></div>
+          <div class="clip-row"><span class="clip-lamp" id="clipL"></span><span class="clip-label">CLIP</span></div>
+        </div>
+        <div class="meter-unit">
+          <div class="ch-label">R</div>
+          <canvas class="gauge" id="gaugeR" width="240" height="180" role="img" aria-label="Rチャンネル レベルメーター"></canvas>
+          <div class="readout"><span>PEAK</span><b id="peakValR">-∞</b></div>
+          <div class="readout"><span>HOLD</span><b id="holdValR">-∞</b></div>
+          <div class="clip-row"><span class="clip-lamp" id="clipR"></span><span class="clip-label">CLIP</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="control-col">
+      <div class="status-strip">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">未接続 — 下のボタンでUSBオーディオ入力を許可してください</span>
+      </div>
+
+      <div class="controls">
+        <button class="start-btn" id="startBtn" type="button">接続してメーター開始</button>
+
+        <div class="row-grid">
+          <div class="field">
+            <label for="deviceSelect">入力デバイス</label>
+            <select id="deviceSelect"><option value="">開始後に選択できます</option></select>
+          </div>
+          <div class="field">
+            <label for="calSelect">基準レベル (0VU)</label>
+            <select id="calSelect">
+              <option value="-20">-20 dBFS</option>
+              <option value="-18" selected>-18 dBFS</option>
+              <option value="-16">-16 dBFS</option>
+              <option value="-14">-14 dBFS</option>
+              <option value="-12">-12 dBFS</option>
+              <option value="0">0 dBFS (フルスケール)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>メーター特性</label>
+          <div class="mode-switch">
+            <button type="button" id="modeVu" class="active" aria-pressed="true">VU (300ms)</button>
+            <button type="button" id="modePeak" aria-pressed="false">PEAK</button>
+          </div>
+        </div>
+      </div>
+
+      <details class="help">
+        <summary>接続方法と注意事項</summary>
+        <div class="help-body">
+          <strong>接続手順</strong>
+          <ol>
+            <li>DM3側で、メーターに映したいステレオバス(MAIN等)をUSB OUTの1-2chにルーティングします。</li>
+            <li>DM3のUSB-Cポートと iPhone を、USB-C to USB-C ケーブル(Lightning機種はUSBカメラアダプタ)で接続します。</li>
+            <li>Safariでこのページを開いた状態で「接続してメーター開始」をタップし、マイクへのアクセスを許可します。</li>
+            <li>「入力デバイス」にDM3(USB Audio CODEC等)が現れたら選択してください。表示されない場合は既定のまま進めても、DM3が接続時に自動的に入力として使われることがあります。</li>
+          </ol>
+          <strong>注意事項</strong>
+          <ol>
+            <li>iOSの仕様上、外部インターフェースでもステレオ(2ch)で取得できない場合があります。その場合はL/Rとも同じ信号が表示されます。</li>
+            <li>ホーム画面に追加すると次回からアプリのように起動できますが、マイク許可は初回のみ求められます。</li>
+            <li>基準レベル(0VU)はDM3側のメーター基準に合わせて選べます。放送/音楽制作の一般的な値は-18〜-20dBFSです。</li>
+            <li>画面ロックすると測定は止まります。計測中は自動ロックが切れる設定を推奨します。</li>
+          </ol>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="foot-note">Web Audio API によるステレオVU/ピークメーター</div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const PW_HASH = "496a02a3640e5f52cfe4885a5cecde793ae9bf5d1e916da99b677f47cb8276a6";
+  const STORAGE_KEY = "dm3vu_unlocked_v1";
+  const overlay = document.getElementById("lockOverlay");
+  const app = document.getElementById("app");
+  const lockForm = document.getElementById("lockForm");
+  const lockInput = document.getElementById("lockInput");
+  const lockError = document.getElementById("lockError");
+
+  async function sha256Hex(text) {
+    const enc = new TextEncoder().encode(text);
+    const buf = await crypto.subtle.digest("SHA-256", enc);
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function unlock() {
+    app.hidden = false;
+    overlay.hidden = true;
+  }
+
+  let alreadyUnlocked = false;
+  try {
+    if (localStorage.getItem(STORAGE_KEY) === PW_HASH) {
+      alreadyUnlocked = true;
+      unlock();
+    }
+  } catch (e) {}
+
+  if (!alreadyUnlocked) {
+    lockForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      lockError.textContent = "";
+      if (!window.crypto || !window.crypto.subtle) {
+        lockError.textContent = "この環境では認証機能を利用できません(https接続を確認してください)";
+        return;
+      }
+      const hash = await sha256Hex(lockInput.value);
+      if (hash === PW_HASH) {
+        try { localStorage.setItem(STORAGE_KEY, PW_HASH); } catch (e) {}
+        unlock();
+      } else {
+        lockError.textContent = "パスワードが違います";
+        const card = overlay.querySelector(".lock-card");
+        card.classList.remove("lock-shake");
+        void card.offsetWidth;
+        card.classList.add("lock-shake");
+        lockInput.value = "";
+        lockInput.focus();
+      }
+    });
+    setTimeout(() => lockInput.focus(), 50);
+  }
+})();
+</script>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- DOM ----------
+  const startBtn = document.getElementById("startBtn");
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+  const deviceSelect = document.getElementById("deviceSelect");
+  const calSelect = document.getElementById("calSelect");
+  const modeVuBtn = document.getElementById("modeVu");
+  const modePeakBtn = document.getElementById("modePeak");
+  const canvasL = document.getElementById("gaugeL");
+  const canvasR = document.getElementById("gaugeR");
+  const ctxL = canvasL.getContext("2d");
+  const ctxR = canvasR.getContext("2d");
+  const peakValEls = { L: document.getElementById("peakValL"), R: document.getElementById("peakValR") };
+  const holdValEls = { L: document.getElementById("holdValL"), R: document.getElementById("holdValR") };
+  const clipLampEls = { L: document.getElementById("clipL"), R: document.getElementById("clipR") };
+
+  // ---------- State ----------
+  let audioCtx = null;
+  let mediaStream = null;
+  let sourceNode = null;
+  let workletNode = null;
+  let processorNode = null;
+  let running = false;
+  let calibrationDBFS = -18;
+  let meterMode = "vu"; // 'vu' | 'peak'
+  let lastMsgTime = null;
+  let monoWarned = false;
+
+  const AMP_AT_PLUS3 = Math.pow(10, 3 / 20); // amplitude ratio at +3 VU
+  const TAU_MS = 65.2; // one-pole time constant giving ~300ms to 99% (IEC 60268-17 style)
+  const PEAK_DECAY_DB_PER_SEC = 20; // hold decay speed once past hold time
+  const HOLD_TIME_MS = 1400;
+
+  const ch = {
+    L: { vu: 0, instRms: 0, instPeak: -Infinity, holdDb: -60, holdSetAt: 0, clipUntil: 0 },
+    R: { vu: 0, instRms: 0, instPeak: -Infinity, holdDb: -60, holdSetAt: 0, clipUntil: 0 },
+  };
+
+  function dbfs(x) {
+    if (!isFinite(x) || x <= 0) return -Infinity;
+    return 20 * Math.log10(x);
+  }
+  function fmtDb(v) {
+    if (v === -Infinity || v < -60) return "-∞";
+    return (v > 0 ? "+" : "") + v.toFixed(1);
+  }
+
+  // ---------- Worklet source (inlined via Blob, no external file) ----------
+  const workletSrc = `
+    class MeterProcessor extends AudioWorkletProcessor {
+      constructor() {
+        super();
+        this.sumSqL = 0; this.sumSqR = 0; this.count = 0;
+        this.peakL = 0; this.peakR = 0;
+        this.blocksPerReport = 8;
+        this.blockCounter = 0;
+      }
+      process(inputs) {
+        const input = inputs[0];
+        if (!input || input.length === 0) return true;
+        const chanL = input[0];
+        const chanR = input.length > 1 ? input[1] : input[0];
+        for (let i = 0; i < chanL.length; i++) {
+          const l = chanL[i];
+          const r = chanR[i];
+          this.sumSqL += l * l;
+          this.sumSqR += r * r;
+          const al = Math.abs(l), ar = Math.abs(r);
+          if (al > this.peakL) this.peakL = al;
+          if (ar > this.peakR) this.peakR = ar;
+          this.count++;
+        }
+        this.blockCounter++;
+        if (this.blockCounter >= this.blocksPerReport && this.count > 0) {
+          this.port.postMessage({
+            rmsL: Math.sqrt(this.sumSqL / this.count),
+            rmsR: Math.sqrt(this.sumSqR / this.count),
+            peakL: this.peakL,
+            peakR: this.peakR,
+            channels: input.length
+          });
+          this.sumSqL = 0; this.sumSqR = 0; this.count = 0;
+          this.peakL = 0; this.peakR = 0;
+          this.blockCounter = 0;
+        }
+        return true;
+      }
+    }
+    registerProcessor("meter-processor", MeterProcessor);
+  `;
+
+  function handleMeterMessage(data) {
+    const now = performance.now();
+    const dt = lastMsgTime == null ? 20 : Math.min(now - lastMsgTime, 200);
+    lastMsgTime = now;
+
+    if (data.channels === 1 && !monoWarned) {
+      monoWarned = true;
+      statusText.innerHTML = "<b>モノラル入力</b>を検出しました。L/Rに同一信号を表示しています。";
+    }
+
+    const refLinear = Math.pow(10, calibrationDBFS / 20);
+    const alpha = 1 - Math.exp(-dt / TAU_MS);
+
+    ["L", "R"].forEach((c, idx) => {
+      const rms = idx === 0 ? data.rmsL : data.rmsR;
+      const peak = idx === 0 ? data.peakL : data.peakR;
+      const s = ch[c];
+
+      // VU ballistic (linear-amplitude one-pole filter -> matches real meter physics)
+      const ratio = rms / refLinear;
+      s.vu += (ratio - s.vu) * alpha;
+
+      // Peak + hold in dBFS
+      const instDb = dbfs(peak);
+      s.instPeak = instDb;
+      if (instDb >= s.holdDb) {
+        s.holdDb = instDb;
+        s.holdSetAt = now;
+      } else if (now - s.holdSetAt > HOLD_TIME_MS) {
+        s.holdDb = Math.max(instDb, s.holdDb - (PEAK_DECAY_DB_PER_SEC * dt) / 1000);
+      }
+
+      if (instDb >= -0.3) {
+        s.clipUntil = now + 1200;
+      }
+    });
+  }
+
+  async function setupAudioGraph(deviceId) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const constraints = {
+      audio: {
+        channelCount: { ideal: 2 },
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      },
+    };
+    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+    sourceNode = audioCtx.createMediaStreamSource(mediaStream);
+
+    let usedWorklet = false;
+    if (audioCtx.audioWorklet) {
+      try {
+        const blob = new Blob([workletSrc], { type: "application/javascript" });
+        const url = URL.createObjectURL(blob);
+        await audioCtx.audioWorklet.addModule(url);
+        workletNode = new AudioWorkletNode(audioCtx, "meter-processor", {
+          numberOfInputs: 1,
+          numberOfOutputs: 0,
+          channelCount: 2,
+          channelCountMode: "explicit",
+          channelInterpretation: "discrete",
+        });
+        workletNode.port.onmessage = (e) => handleMeterMessage(e.data);
+        sourceNode.connect(workletNode);
+        usedWorklet = true;
+      } catch (err) {
+        usedWorklet = false;
+      }
+    }
+
+    if (!usedWorklet) {
+      // Fallback for older Safari without AudioWorklet support
+      processorNode = audioCtx.createScriptProcessor(2048, 2, 1);
+      let sumSqL = 0, sumSqR = 0, count = 0, peakL = 0, peakR = 0, blocks = 0;
+      processorNode.onaudioprocess = (e) => {
+        const inBuf = e.inputBuffer;
+        const l = inBuf.getChannelData(0);
+        const r = inBuf.numberOfChannels > 1 ? inBuf.getChannelData(1) : l;
+        for (let i = 0; i < l.length; i++) {
+          sumSqL += l[i] * l[i];
+          sumSqR += r[i] * r[i];
+          const al = Math.abs(l[i]), ar = Math.abs(r[i]);
+          if (al > peakL) peakL = al;
+          if (ar > peakR) peakR = ar;
+          count++;
+        }
+        blocks++;
+        if (blocks >= 2) {
+          handleMeterMessage({
+            rmsL: Math.sqrt(sumSqL / count),
+            rmsR: Math.sqrt(sumSqR / count),
+            peakL, peakR,
+            channels: inBuf.numberOfChannels,
+          });
+          sumSqL = 0; sumSqR = 0; count = 0; peakL = 0; peakR = 0; blocks = 0;
+        }
+      };
+      sourceNode.connect(processorNode);
+      const silentSink = audioCtx.createGain();
+      silentSink.gain.value = 0;
+      processorNode.connect(silentSink);
+      silentSink.connect(audioCtx.destination);
+    }
+  }
+
+  async function populateDeviceList() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter((d) => d.kind === "audioinput");
+      deviceSelect.innerHTML = "";
+      inputs.forEach((d, i) => {
+        const opt = document.createElement("option");
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `入力デバイス ${i + 1}`;
+        deviceSelect.appendChild(opt);
+      });
+      if (inputs.length === 0) {
+        const opt = document.createElement("option");
+        opt.textContent = "デバイスが見つかりません";
+        deviceSelect.appendChild(opt);
+      }
+    } catch (err) {
+      // enumerateDevices can fail silently pre-permission; ignore
+    }
+  }
+
+  async function start() {
+    startBtn.disabled = true;
+    statusText.textContent = "マイクへのアクセスを要求しています…";
+    try {
+      await setupAudioGraph(deviceSelect.value || undefined);
+      running = true;
+      startBtn.textContent = "停止";
+      startBtn.classList.add("stop");
+      statusDot.classList.add("on");
+      statusDot.classList.remove("err");
+      statusText.innerHTML = "<b>接続中</b> — サンプルレート " + audioCtx.sampleRate + " Hz";
+      await populateDeviceList();
+    } catch (err) {
+      statusDot.classList.add("err");
+      statusText.textContent = "接続できませんでした: " + (err && err.message ? err.message : err);
+    } finally {
+      startBtn.disabled = false;
+    }
+  }
+
+  function stop() {
+    running = false;
+    try { if (workletNode) workletNode.disconnect(); } catch (e) {}
+    try { if (processorNode) processorNode.disconnect(); } catch (e) {}
+    try { if (sourceNode) sourceNode.disconnect(); } catch (e) {}
+    try { if (mediaStream) mediaStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+    try { if (audioCtx) audioCtx.close(); } catch (e) {}
+    workletNode = null; processorNode = null; sourceNode = null; mediaStream = null; audioCtx = null;
+    startBtn.textContent = "接続してメーター開始";
+    startBtn.classList.remove("stop");
+    statusDot.classList.remove("on", "err");
+    statusText.textContent = "未接続 — 下のボタンでUSBオーディオ入力を許可してください";
+    ch.L.vu = 0; ch.R.vu = 0;
+    ch.L.holdDb = -60; ch.R.holdDb = -60;
+  }
+
+  startBtn.addEventListener("click", () => {
+    if (running) stop(); else start();
+  });
+
+  deviceSelect.addEventListener("change", async () => {
+    if (running) { stop(); await start(); }
+  });
+
+  calSelect.addEventListener("change", () => {
+    calibrationDBFS = parseFloat(calSelect.value);
+  });
+
+  function setMode(m) {
+    meterMode = m;
+    modeVuBtn.classList.toggle("active", m === "vu");
+    modeVuBtn.setAttribute("aria-pressed", String(m === "vu"));
+    modePeakBtn.classList.toggle("active", m === "peak");
+    modePeakBtn.setAttribute("aria-pressed", String(m === "peak"));
+  }
+  modeVuBtn.addEventListener("click", () => setMode("vu"));
+  modePeakBtn.addEventListener("click", () => setMode("peak"));
+
+  // ---------- Drawing ----------
+  const DB_TICKS = [-20, -10, -7, -5, -3, -2, -1, 0, 1, 2, 3];
+  const MIN_ANGLE = -55 * Math.PI / 180;
+  const MAX_ANGLE = 55 * Math.PI / 180;
+  const REST_FRACTION_OFFSET = -0.045; // small dead zone below -20
+
+  function fractionForDb(db) {
+    const amp = Math.pow(10, db / 20);
+    return amp / AMP_AT_PLUS3;
+  }
+  function fractionToAngle(frac) {
+    const clamped = Math.max(-0.02, Math.min(1.12, frac));
+    const norm = (clamped - REST_FRACTION_OFFSET) / (1 - REST_FRACTION_OFFSET);
+    return MIN_ANGLE + norm * (MAX_ANGLE - MIN_ANGLE);
+  }
+
+  function drawGauge(cx2d, w, h, needleFrac, mode, styleColor) {
+    cx2d.clearRect(0, 0, w, h);
+    const cx = w / 2;
+    const cy = h * 0.86;
+    const r = h * 0.74;
+
+    const faceStyle = getComputedStyle(document.documentElement);
+    const ink = faceStyle.getPropertyValue("--ink").trim() || "#2a2417";
+    const inkDim = faceStyle.getPropertyValue("--ink-dim").trim() || "#6b6249";
+    const danger = faceStyle.getPropertyValue("--danger").trim() || "#a83324";
+
+    // Arc scale
+    cx2d.lineWidth = 2;
+    cx2d.strokeStyle = inkDim;
+    cx2d.beginPath();
+    cx2d.arc(cx, cy, r, MIN_ANGLE - Math.PI / 2, MAX_ANGLE - Math.PI / 2);
+    cx2d.stroke();
+
+    // Red zone from 0 to +3
+    const redStartAngle = fractionToAngle(fractionForDb(0)) - Math.PI / 2;
+    const redEndAngle = fractionToAngle(fractionForDb(3)) - Math.PI / 2;
+    cx2d.lineWidth = 4;
+    cx2d.strokeStyle = danger;
+    cx2d.beginPath();
+    cx2d.arc(cx, cy, r, redStartAngle, redEndAngle);
+    cx2d.stroke();
+
+    // Ticks + labels
+    cx2d.font = "600 " + Math.round(h * 0.075) + "px 'IBM Plex Mono', monospace";
+    cx2d.fillStyle = ink;
+    cx2d.textAlign = "center";
+    cx2d.textBaseline = "middle";
+    DB_TICKS.forEach((db) => {
+      const ang = fractionToAngle(fractionForDb(db)) - Math.PI / 2;
+      const inner = r - h * 0.09;
+      const outer = r;
+      const x1 = cx + Math.cos(ang) * inner;
+      const y1 = cy + Math.sin(ang) * inner;
+      const x2 = cx + Math.cos(ang) * outer;
+      const y2 = cy + Math.sin(ang) * outer;
+      cx2d.strokeStyle = db >= 0 ? danger : ink;
+      cx2d.lineWidth = db === 0 ? 2.4 : 1.4;
+      cx2d.beginPath();
+      cx2d.moveTo(x1, y1);
+      cx2d.lineTo(x2, y2);
+      cx2d.stroke();
+
+      const lx = cx + Math.cos(ang) * (inner - h * 0.09);
+      const ly = cy + Math.sin(ang) * (inner - h * 0.09);
+      cx2d.fillStyle = db >= 0 ? danger : ink;
+      cx2d.fillText(db > 0 ? "+" + db : String(db), lx, ly);
+    });
+
+    // "VU" plate text
+    cx2d.font = "700 " + Math.round(h * 0.1) + "px Oswald, sans-serif";
+    cx2d.fillStyle = ink;
+    cx2d.fillText(mode === "vu" ? "VU" : "PEAK dB", cx, cy - r * 0.32);
+
+    // Needle
+    const angle = fractionToAngle(needleFrac) - Math.PI / 2;
+    const needleLen = r * 0.92;
+    cx2d.strokeStyle = styleColor;
+    cx2d.lineWidth = Math.max(2, h * 0.018);
+    cx2d.lineCap = "round";
+    cx2d.beginPath();
+    cx2d.moveTo(cx, cy);
+    cx2d.lineTo(cx + Math.cos(angle) * needleLen, cy + Math.sin(angle) * needleLen);
+    cx2d.stroke();
+
+    // Pivot
+    cx2d.fillStyle = styleColor;
+    cx2d.beginPath();
+    cx2d.arc(cx, cy, h * 0.035, 0, Math.PI * 2);
+    cx2d.fill();
+  }
+
+  function renderLoop() {
+    const now = performance.now();
+    const vuColor = getComputedStyle(document.documentElement).getPropertyValue("--needle-vu").trim() || "#2a2417";
+    const peakColor = getComputedStyle(document.documentElement).getPropertyValue("--needle-peak").trim() || "#1f5f6b";
+
+    ["L", "R"].forEach((c) => {
+      const s = ch[c];
+      const cvs = c === "L" ? canvasL : canvasR;
+      const cxctx = c === "L" ? ctxL : ctxR;
+
+      let frac, color;
+      if (meterMode === "vu") {
+        // s.vu is already amplitude relative to 0VU (1.0 = 0VU)
+        frac = s.vu / AMP_AT_PLUS3;
+        color = vuColor;
+      } else {
+        const refLinear = Math.pow(10, calibrationDBFS / 20);
+        const ampRel = Math.pow(10, s.instPeak / 20) / refLinear;
+        frac = ampRel / AMP_AT_PLUS3;
+        color = peakColor;
+      }
+      const cssW = parseFloat(cvs.dataset.cssW) || cvs.clientWidth || 210;
+      const cssH = parseFloat(cvs.dataset.cssH) || cssW * (180 / 240);
+      drawGauge(cxctx, cssW, cssH, frac, meterMode, color);
+
+      peakValEls[c].textContent = fmtDb(s.instPeak) === "-∞" ? "-∞" : fmtDb(s.instPeak) + " dBFS";
+      holdValEls[c].textContent = fmtDb(s.holdDb) === "-∞" ? "-∞" : fmtDb(s.holdDb) + " dBFS";
+      clipLampEls[c].classList.toggle("lit", now < s.clipUntil);
+    });
+
+    requestAnimationFrame(renderLoop);
+  }
+
+  calibrationDBFS = parseFloat(calSelect.value);
+  requestAnimationFrame(renderLoop);
+
+  // Resize canvases for device pixel ratio crispness
+  function fitCanvas(cvs) {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = cvs.clientWidth || 210;
+    const cssH = cssW * (180 / 240);
+    cvs.width = cssW * dpr;
+    cvs.height = cssH * dpr;
+    cvs.dataset.cssW = String(cssW);
+    cvs.dataset.cssH = String(cssH);
+    const c2d = cvs.getContext("2d");
+    c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", () => { fitCanvas(canvasL); fitCanvas(canvasR); });
+  window.addEventListener("load", () => { fitCanvas(canvasL); fitCanvas(canvasR); });
+  window.addEventListener("orientationchange", () => {
+    setTimeout(() => { fitCanvas(canvasL); fitCanvas(canvasR); }, 120);
+  });
+  fitCanvas(canvasL); fitCanvas(canvasR);
+})();
+</script>
+
+</body>
+</html>
