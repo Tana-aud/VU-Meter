@@ -584,9 +584,19 @@
         </div>
 
         <div class="field">
+          <label for="speedSelect">針の応答速度(VU)</label>
+          <select id="speedSelect">
+            <option value="32.6">速め (150ms)</option>
+            <option value="65.2">標準VU (300ms)</option>
+            <option value="130.3" selected>ゆっくり (600ms)</option>
+            <option value="260.6">とてもゆっくり (1200ms)</option>
+          </select>
+        </div>
+
+        <div class="field">
           <label>メーター特性</label>
           <div class="mode-switch">
-            <button type="button" id="modeVu" class="active" aria-pressed="true">VU (300ms)</button>
+            <button type="button" id="modeVu" class="active" aria-pressed="true">VU</button>
             <button type="button" id="modePeak" aria-pressed="false">PEAK</button>
           </div>
         </div>
@@ -684,6 +694,7 @@
   const statusText = document.getElementById("statusText");
   const deviceSelect = document.getElementById("deviceSelect");
   const calSelect = document.getElementById("calSelect");
+  const speedSelect = document.getElementById("speedSelect");
   const modeVuBtn = document.getElementById("modeVu");
   const modePeakBtn = document.getElementById("modePeak");
   const canvasL = document.getElementById("gaugeL");
@@ -707,7 +718,7 @@
   let monoWarned = false;
 
   const AMP_AT_PLUS3 = Math.pow(10, 3 / 20); // amplitude ratio at +3 VU
-  const TAU_MS = 65.2; // one-pole time constant giving ~300ms to 99% (IEC 60268-17 style)
+  let TAU_MS = 130.3; // one-pole time constant for the VU needle; user-adjustable via speedSelect
   const PEAK_DECAY_DB_PER_SEC = 20; // hold decay speed once past hold time
   const HOLD_TIME_MS = 1400;
 
@@ -947,6 +958,10 @@
     calibrationDBFS = parseFloat(calSelect.value);
   });
 
+  speedSelect.addEventListener("change", () => {
+    TAU_MS = parseFloat(speedSelect.value);
+  });
+
   function setMode(m) {
     meterMode = m;
     modeVuBtn.classList.toggle("active", m === "vu");
@@ -1083,6 +1098,7 @@
   }
 
   calibrationDBFS = parseFloat(calSelect.value);
+  TAU_MS = parseFloat(speedSelect.value);
   requestAnimationFrame(renderLoop);
 
   // Resize canvases for device pixel ratio crispness
