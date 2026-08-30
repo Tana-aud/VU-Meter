@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<title>DM3 VUメーター</title>
+<title>USB VUメーター</title>
 <style>
   :root {
     --bg: #e6e0d2;
@@ -339,6 +339,25 @@
   }
   .mode-switch button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
+  .monitor-vol {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .monitor-vol input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    height: 24px;
+  }
+  .monitor-vol .vol-val {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 34px;
+    text-align: right;
+    flex: none;
+  }
+
   /* ---- Help ---- */
   details.help {
     border-top: 1px solid var(--panel-edge);
@@ -517,7 +536,7 @@
 <div class="lock-overlay" id="lockOverlay">
   <div class="lock-card">
     <p class="lock-title">ACCESS LOCKED</p>
-    <p class="lock-sub">DM3 VUメーター — パスワードを入力してください</p>
+    <p class="lock-sub">USB VUメーター — パスワードを入力してください</p>
     <form id="lockForm" autocomplete="off">
       <input class="lock-input" id="lockInput" type="password" inputmode="text" placeholder="パスワード" autocomplete="off" autocapitalize="off" spellcheck="false" />
       <button class="lock-btn" type="submit">unlock</button>
@@ -529,7 +548,7 @@
 <div class="rack" id="app" hidden>
 
   <div class="nameplate">
-    <h1>DM3 VUメーター</h1>
+    <h1>USB VUメーター</h1>
     <span class="model">STEREO&nbsp;LEVEL&nbsp;MONITOR</span>
   </div>
 
@@ -600,6 +619,22 @@
             <button type="button" id="modePeak" aria-pressed="false">PEAK</button>
           </div>
         </div>
+
+        <div class="field">
+          <label>モニター音声(スピーカー/イヤホン)</label>
+          <div class="mode-switch">
+            <button type="button" id="monitorOff" class="active" aria-pressed="true">OFF</button>
+            <button type="button" id="monitorOn" aria-pressed="false">ON</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="monitorVolume">モニター音量</label>
+          <div class="monitor-vol">
+            <input type="range" id="monitorVolume" min="0" max="100" value="70" />
+            <span class="vol-val" id="monitorVolVal">70%</span>
+          </div>
+        </div>
       </div>
 
       <details class="help">
@@ -618,6 +653,8 @@
             <li>ホーム画面に追加すると次回からアプリのように起動できますが、マイク許可は初回のみ求められます。</li>
             <li>基準レベル(0VU)はDM3側のメーター基準に合わせて選べます。放送/音楽制作の一般的な値は-18〜-20dBFSです。</li>
             <li>画面ロックすると測定は止まります。計測中は自動ロックが切れる設定を推奨します。</li>
+            <li>モニター音声をONにすると、メーターに映している音がそのままiPhoneのスピーカーまたは接続中のBluetoothイヤホン等から再生されます。Bluetooth機器は事前にiOS本体のBluetooth設定で接続しておけば自動的にそちらから再生されます(未接続時はスピーカーから再生)。マイクとスピーカーが近い環境ではハウリングの恐れがあるため、初期状態はOFFにしてあります。</li>
+            <li>iPhone本体のマナースイッチ(サイレントスイッチ)がオンでも、Web Audioの音声は再生されることがあります。予期せぬ音量に注意してください。</li>
           </ol>
         </div>
       </details>
@@ -697,6 +734,10 @@
   const speedSelect = document.getElementById("speedSelect");
   const modeVuBtn = document.getElementById("modeVu");
   const modePeakBtn = document.getElementById("modePeak");
+  const monitorOffBtn = document.getElementById("monitorOff");
+  const monitorOnBtn = document.getElementById("monitorOn");
+  const monitorVolume = document.getElementById("monitorVolume");
+  const monitorVolVal = document.getElementById("monitorVolVal");
   const canvasL = document.getElementById("gaugeL");
   const canvasR = document.getElementById("gaugeR");
   const ctxL = canvasL.getContext("2d");
@@ -711,9 +752,11 @@
   let sourceNode = null;
   let workletNode = null;
   let processorNode = null;
+  let monitorGainNode = null;
   let running = false;
-  let calibrationDBFS = -18;
+  let calibrationDBFS = -20;
   let meterMode = "vu"; // 'vu' | 'peak'
+  let monitorEnabled = false;
   let lastMsgTime = null;
   let monoWarned = false;
 
@@ -833,6 +876,14 @@
     if (audioCtx.state === "suspended") await audioCtx.resume();
     sourceNode = audioCtx.createMediaStreamSource(mediaStream);
 
+    // Optional monitor path: lets the user hear the metered signal through
+    // the iPhone speaker or whatever output route (e.g. Bluetooth earphones)
+    // is currently active at the OS level. Muted by default (feedback risk).
+    monitorGainNode = audioCtx.createGain();
+    monitorGainNode.gain.value = monitorEnabled ? parseFloat(monitorVolume.value) / 100 : 0;
+    sourceNode.connect(monitorGainNode);
+    monitorGainNode.connect(audioCtx.destination);
+
     let usedWorklet = false;
     if (audioCtx.audioWorklet) {
       try {
@@ -934,10 +985,11 @@
     running = false;
     try { if (workletNode) workletNode.disconnect(); } catch (e) {}
     try { if (processorNode) processorNode.disconnect(); } catch (e) {}
+    try { if (monitorGainNode) monitorGainNode.disconnect(); } catch (e) {}
     try { if (sourceNode) sourceNode.disconnect(); } catch (e) {}
     try { if (mediaStream) mediaStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
     try { if (audioCtx) audioCtx.close(); } catch (e) {}
-    workletNode = null; processorNode = null; sourceNode = null; mediaStream = null; audioCtx = null;
+    workletNode = null; processorNode = null; monitorGainNode = null; sourceNode = null; mediaStream = null; audioCtx = null;
     startBtn.textContent = "接続してメーター開始";
     startBtn.classList.remove("stop");
     statusDot.classList.remove("on", "err");
@@ -971,6 +1023,30 @@
   }
   modeVuBtn.addEventListener("click", () => setMode("vu"));
   modePeakBtn.addEventListener("click", () => setMode("peak"));
+
+  function applyMonitorGain() {
+    if (!monitorGainNode || !audioCtx) return;
+    const target = monitorEnabled ? parseFloat(monitorVolume.value) / 100 : 0;
+    try {
+      monitorGainNode.gain.setTargetAtTime(target, audioCtx.currentTime, 0.01);
+    } catch (e) {
+      monitorGainNode.gain.value = target;
+    }
+  }
+  function setMonitor(on) {
+    monitorEnabled = on;
+    monitorOffBtn.classList.toggle("active", !on);
+    monitorOffBtn.setAttribute("aria-pressed", String(!on));
+    monitorOnBtn.classList.toggle("active", on);
+    monitorOnBtn.setAttribute("aria-pressed", String(on));
+    applyMonitorGain();
+  }
+  monitorOffBtn.addEventListener("click", () => setMonitor(false));
+  monitorOnBtn.addEventListener("click", () => setMonitor(true));
+  monitorVolume.addEventListener("input", () => {
+    monitorVolVal.textContent = monitorVolume.value + "%";
+    applyMonitorGain();
+  });
 
   // ---------- Drawing ----------
   const DB_TICKS = [-20, -10, -7, -5, -3, -2, -1, 0, 1, 2, 3];
