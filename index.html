@@ -653,7 +653,8 @@
             <li>ホーム画面に追加すると次回からアプリのように起動できますが、マイク許可は初回のみ求められます。</li>
             <li>基準レベル(0VU)はDM3側のメーター基準に合わせて選べます。放送/音楽制作の一般的な値は-18〜-20dBFSです。</li>
             <li>画面ロックすると測定は止まります。計測中は自動ロックが切れる設定を推奨します。</li>
-            <li>モニター音声をONにすると、メーターに映している音がそのままiPhoneのスピーカーまたは接続中のBluetoothイヤホン等から再生されます。Bluetooth機器は事前にiOS本体のBluetooth設定で接続しておけば自動的にそちらから再生されます(未接続時はスピーカーから再生)。マイクとスピーカーが近い環境ではハウリングの恐れがあるため、初期状態はOFFにしてあります。</li>
+            <li>モニター音声をONにすると、メーターに映している音がそのままiPhoneのスピーカーまたは接続中のBluetoothイヤホン等から再生されます。マイクとスピーカーが近い環境ではハウリングの恐れがあるため、初期状態はOFFにしてあります。</li>
+            <li><strong>重要</strong>:Bluetoothイヤホン/ヘッドセット(マイク内蔵タイプ)を接続した状態でモニター音声をONにすると、iOSの仕様により入力がUSBインターフェースからBluetooth機器側のマイクに自動的に切り替わってしまうことがあります(通話時と同じ挙動のため)。USB入力を確実に使いたい場合は、モニター音声はOFFのままにするか、Bluetooth機器を接続しないでください。</li>
             <li>iPhone本体のマナースイッチ(サイレントスイッチ)がオンでも、Web Audioの音声は再生されることがあります。予期せぬ音量に注意してください。</li>
           </ol>
         </div>
@@ -753,6 +754,8 @@
   let workletNode = null;
   let processorNode = null;
   let monitorGainNode = null;
+  let monitorDestNode = null;
+  let monitorVideoEl = null;
   let running = false;
   let calibrationDBFS = -20;
   let meterMode = "vu"; // 'vu' | 'peak'
@@ -876,13 +879,16 @@
     if (audioCtx.state === "suspended") await audioCtx.resume();
     sourceNode = audioCtx.createMediaStreamSource(mediaStream);
 
-    // Optional monitor path: lets the user hear the metered signal through
-    // the iPhone speaker or whatever output route (e.g. Bluetooth earphones)
-    // is currently active at the OS level. Muted by default (feedback risk).
-    monitorGainNode = audioCtx.createGain();
-    monitorGainNode.gain.value = monitorEnabled ? parseFloat(monitorVolume.value) / 100 : 0;
-    sourceNode.connect(monitorGainNode);
-    monitorGainNode.connect(audioCtx.destination);
+    // NOTE: the monitor (speaker/earphone playback) path is intentionally
+    // NOT wired up here. As long as nothing is connected to audioCtx.destination,
+    // this stays a record-only audio session. The moment we also connect an
+    // output, iOS switches the session to a bidirectional "PlayAndRecord"
+    // mode - the same mode used for phone/video calls - which can make iOS
+    // silently reroute the *input* to a connected Bluetooth headset's own
+    // microphone instead of the USB interface. So the output path is only
+    // ever created on demand, in enableMonitorAudio(), when the user
+    // explicitly turns monitoring ON.
+    if (monitorEnabled) enableMonitorAudio();
 
     let usedWorklet = false;
     if (audioCtx.audioWorklet) {
@@ -940,6 +946,54 @@
     }
   }
 
+  // Wire up the monitor (speaker/earphone) output path on demand.
+  // Routed through a hidden <video> element rather than straight to
+  // audioCtx.destination: on iOS, a plain AudioContext output in a
+  // record+playback session tends to default to the tiny earpiece speaker,
+  // while media played through an actual <video>/<audio> element tends to
+  // default to the main loudspeaker (the same trick WebRTC/video-call apps
+  // rely on). Falls back to a direct connection if this isn't supported.
+  function enableMonitorAudio() {
+    if (!audioCtx || !sourceNode || monitorGainNode) return;
+    monitorGainNode = audioCtx.createGain();
+    monitorGainNode.gain.value = parseFloat(monitorVolume.value) / 100;
+    sourceNode.connect(monitorGainNode);
+
+    try {
+      monitorDestNode = audioCtx.createMediaStreamDestination();
+      monitorGainNode.connect(monitorDestNode);
+      monitorVideoEl = document.createElement("video");
+      monitorVideoEl.setAttribute("playsinline", "");
+      monitorVideoEl.setAttribute("webkit-playsinline", "");
+      monitorVideoEl.muted = false;
+      monitorVideoEl.style.position = "fixed";
+      monitorVideoEl.style.width = "1px";
+      monitorVideoEl.style.height = "1px";
+      monitorVideoEl.style.opacity = "0";
+      monitorVideoEl.style.pointerEvents = "none";
+      document.body.appendChild(monitorVideoEl);
+      monitorVideoEl.srcObject = monitorDestNode.stream;
+      monitorVideoEl.play().catch(() => {});
+    } catch (e) {
+      monitorDestNode = null;
+      if (monitorVideoEl) { try { monitorVideoEl.remove(); } catch (e2) {} monitorVideoEl = null; }
+      monitorGainNode.connect(audioCtx.destination);
+    }
+  }
+
+  function disableMonitorAudio() {
+    try { if (monitorGainNode) monitorGainNode.disconnect(); } catch (e) {}
+    try { if (monitorDestNode) monitorDestNode.disconnect(); } catch (e) {}
+    if (monitorVideoEl) {
+      try { monitorVideoEl.pause(); } catch (e) {}
+      try { monitorVideoEl.srcObject = null; } catch (e) {}
+      try { monitorVideoEl.remove(); } catch (e) {}
+    }
+    monitorGainNode = null;
+    monitorDestNode = null;
+    monitorVideoEl = null;
+  }
+
   async function populateDeviceList() {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -985,11 +1039,11 @@
     running = false;
     try { if (workletNode) workletNode.disconnect(); } catch (e) {}
     try { if (processorNode) processorNode.disconnect(); } catch (e) {}
-    try { if (monitorGainNode) monitorGainNode.disconnect(); } catch (e) {}
+    disableMonitorAudio();
     try { if (sourceNode) sourceNode.disconnect(); } catch (e) {}
     try { if (mediaStream) mediaStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
     try { if (audioCtx) audioCtx.close(); } catch (e) {}
-    workletNode = null; processorNode = null; monitorGainNode = null; sourceNode = null; mediaStream = null; audioCtx = null;
+    workletNode = null; processorNode = null; sourceNode = null; mediaStream = null; audioCtx = null;
     startBtn.textContent = "接続してメーター開始";
     startBtn.classList.remove("stop");
     statusDot.classList.remove("on", "err");
@@ -1024,28 +1078,26 @@
   modeVuBtn.addEventListener("click", () => setMode("vu"));
   modePeakBtn.addEventListener("click", () => setMode("peak"));
 
-  function applyMonitorGain() {
-    if (!monitorGainNode || !audioCtx) return;
-    const target = monitorEnabled ? parseFloat(monitorVolume.value) / 100 : 0;
-    try {
-      monitorGainNode.gain.setTargetAtTime(target, audioCtx.currentTime, 0.01);
-    } catch (e) {
-      monitorGainNode.gain.value = target;
-    }
-  }
   function setMonitor(on) {
     monitorEnabled = on;
     monitorOffBtn.classList.toggle("active", !on);
     monitorOffBtn.setAttribute("aria-pressed", String(!on));
     monitorOnBtn.classList.toggle("active", on);
     monitorOnBtn.setAttribute("aria-pressed", String(on));
-    applyMonitorGain();
+    if (!audioCtx) return; // not connected yet - takes effect on next start()
+    if (on) enableMonitorAudio(); else disableMonitorAudio();
   }
   monitorOffBtn.addEventListener("click", () => setMonitor(false));
   monitorOnBtn.addEventListener("click", () => setMonitor(true));
   monitorVolume.addEventListener("input", () => {
     monitorVolVal.textContent = monitorVolume.value + "%";
-    applyMonitorGain();
+    if (monitorGainNode && audioCtx) {
+      try {
+        monitorGainNode.gain.setTargetAtTime(parseFloat(monitorVolume.value) / 100, audioCtx.currentTime, 0.01);
+      } catch (e) {
+        monitorGainNode.gain.value = parseFloat(monitorVolume.value) / 100;
+      }
+    }
   });
 
   // ---------- Drawing ----------
